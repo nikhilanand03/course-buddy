@@ -1,10 +1,10 @@
 import os
-from langchain_openai import OpenAIEmbeddings
-from langchain_community.vectorstores import FAISS
 from langchain.text_splitter import RecursiveCharacterTextSplitter
-from langchain_openai import ChatOpenAI
 from langchain.chains import RetrievalQA
 from langchain_community.document_loaders import PyPDFLoader
+from langchain_community.vectorstores import FAISS
+from langchain_openai import AzureOpenAIEmbeddings
+from langchain_openai import AzureChatOpenAI
 from django.conf import settings
 
 def process_pdf(pdf_path, document_id):
@@ -27,8 +27,11 @@ def process_pdf(pdf_path, document_id):
     )
     chunks = text_splitter.split_documents(documents)
     
-    # Create embeddings and store in FAISS vector database
-    embeddings = OpenAIEmbeddings()
+    # Create embeddings using Azure OpenAI
+    embeddings = AzureOpenAIEmbeddings(
+        azure_deployment="text-embedding-ada-002",  # Use your embedding deployment name
+        api_version="2024-02-01",  # Update to your API version
+    )
     
     # Create directory for vector stores if it doesn't exist
     vector_store_dir = os.path.join(settings.BASE_DIR, 'vector_stores')
@@ -48,8 +51,11 @@ def get_answer(question, vector_store_path):
     Use RAG to answer a question based on the stored PDF content
     """
     # Load the vector store
-    embeddings = OpenAIEmbeddings()
-    vector_store = FAISS.load_local(vector_store_path, embeddings)
+    embeddings = AzureOpenAIEmbeddings(
+        azure_deployment="text-embedding-3-small",  # Use your embedding deployment name
+        api_version="2024-02-01",  # Update to your API version
+    )
+    vector_store = FAISS.load_local(vector_store_path, embeddings, allow_dangerous_deserialization=True)
     
     # Create a retriever
     retriever = vector_store.as_retriever(
@@ -57,8 +63,15 @@ def get_answer(question, vector_store_path):
         search_kwargs={"k": 3}
     )
     
-    # Create a language model
-    llm = ChatOpenAI(model_name="gpt-3.5-turbo")
+    # Create a language model using Azure OpenAI with GPT-4o
+    llm = AzureChatOpenAI(
+        azure_deployment="gpt-4o",  # Your GPT-4o deployment name
+        api_version="2024-02-01",  # Your API version
+        temperature=0,
+        max_tokens=None,
+        timeout=None,
+        max_retries=2,
+    )
     
     # Create a QA chain
     qa_chain = RetrievalQA.from_chain_type(
